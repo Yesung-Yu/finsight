@@ -1,14 +1,18 @@
 """시세·뉴스·요약·판정을 묶어 한 화면에 필요한 데이터를 만든다 (FR-8 캐시 포함)."""
 from __future__ import annotations
 
+import socket
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
+import requests
 
 from src import crawler, db, market
 
 NEWS_LIMIT = 5
+RETRY_AFTER = timedelta(minutes=10)  # 수집에 실패한 종목은 이 시간 동안 다시 시도하지 않는다
+OFFLINE_MESSAGE = "인터넷에 연결되어 있지 않아 저장된 데이터를 보여 줍니다."
 
 
 @dataclass
@@ -60,6 +64,21 @@ def analyze_pending(conn, code: str, summarizer, analyzer, limit: int = NEWS_LIM
         db.save_analysis(conn, n["id"], summary, sentiment, confidence)
 
 
+def is_online(timeout: float = 1.0) -> bool:
+    """뉴스 API 서버에 연결되는지 빠르게 확인한다."""
+    try:
+        socket.create_connection((crawler.API["hub"][0].split("/")[2], 443), timeout=timeout).close()
+        return True
+    except OSError:
+        return False
+
+
+def _friendly(what: str, e: Exception) -> str:
+    if isinstance(e, requests.RequestException):
+        return f"{what} 서버에 연결하지 못했습니다."
+    return f"{what} 수집 실패: {e}"
+
+
 def update_stock(conn, stock, summarizer=None, analyzer=None, news_limit: int = NEWS_LIMIT) -> list[str]:
     """시세·뉴스를 새로 수집하고 분석한다. 실패한 항목의 오류 메시지 목록을 돌려준다."""
     code, name = stock["code"], stock["name"]
@@ -67,20 +86,27 @@ def update_stock(conn, stock, summarizer=None, analyzer=None, news_limit: int = 
     try:
         market.refresh(conn, code)
     except Exception as e:
-        errors.append(f"시세 수집 실패: {e}")
+        errors.append(_friendly("시세", e))
     try:
         for item in crawler.collect(name, limit=news_limit, skip_url=lambda url: db.news_exists(conn, url)):
             if not item["cached"]:
                 db.save_news(conn, code, item)
     except Exception as e:
-        errors.append(f"뉴스 수집 실패: {e}")
+        errors.append(_friendly("뉴스", e))
     try:
         analyze_pending(conn, code, summarizer, analyzer, news_limit)
     except Exception as e:
         errors.append(f"뉴스 분석 실패: {e}")
     if len(errors) < 2:  # 시세·뉴스 중 하나라도 받았으면 갱신 시각 기록
         db.set_meta(conn, f"updated:{code}", db.now_str())
+    else:
+        db.set_meta(conn, f"failed:{code}", db.now_str())
     return errors
+
+
+def recently_failed(conn, code: str) -> bool:
+    failed = db.get_meta(conn, f"failed:{code}")
+    return bool(failed) and datetime.now() - datetime.fromisoformat(failed) < RETRY_AFTER
 
 
 def is_fresh(conn, code: str) -> bool:
@@ -93,7 +119,10 @@ def get_view(conn, stock, summarizer=None, analyzer=None, force_refresh: bool = 
     code = stock["code"]
     errors: list[str] = []
     fetched = False
-    if force_refresh or not is_fresh(conn, code):
+    needs_update = force_refresh or not (is_fresh(conn, code) or recently_failed(conn, code))
+    if needs_update and not is_online():
+        errors = [OFFLINE_MESSAGE]
+    elif needs_update:
         errors = update_stock(conn, stock, summarizer, analyzer)
         fetched = len(errors) < 2
     else:

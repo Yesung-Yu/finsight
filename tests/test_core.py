@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import db, market, service, ui  # noqa: E402
-from src.crawler import _clean, _clean_body  # noqa: E402
+from src.crawler import _clean, _clean_body, candidates  # noqa: E402
 from src.summarizer import split_lines  # noqa: E402
 
 
@@ -80,6 +80,23 @@ def test_format_helpers():
     assert ui.big_won(1_234_5000_0000_0000) == "1,234조 5,000억원"
     assert ui.big_won(None) == "-"
     assert ui.times(12.345) == "12.35배"
+
+
+def test_candidates_prefer_title_and_alias():
+    items = [
+        {"title": "코스피 마감", "description": "삼성전자 등 반도체주 상승", "url": "1"},
+        {"title": "용인 교통망 확충", "description": "도로 공동 추진", "url": "2"},
+        {"title": "삼성전자, 실적 발표", "description": "", "url": "3"},
+        {"title": "네이버, AI 투자", "description": "", "url": "4"},
+    ]
+    assert [it["url"] for it in candidates("삼성전자", items)] == ["3", "1"]
+    assert [it["url"] for it in candidates("NAVER", items)] == ["4"]
+
+
+def test_candidates_exclude_longer_names():
+    items = [{"title": t, "description": "", "url": str(i)} for i, t in enumerate(
+        ["카카오게임즈 신작", "카카오맵 단풍 지도", "카카오, 3분기 실적", "카카오는 AI에 투자", "‘카카오’ 주가 반등", "AI 키우는 카카오"])]
+    assert [it["url"] for it in candidates("카카오", items)] == ["2", "3", "4", "5"]
 
 
 def test_text_cleaning():

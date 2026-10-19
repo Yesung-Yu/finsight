@@ -79,7 +79,9 @@ if stock is None:
             col.button(s["name"], key=f"similar-{s['code']}", on_click=pick, args=(s["name"],))
     finish()
 
-spinner = "시세와 뉴스를 수집하고 분석하는 중입니다..." if refresh or not service.is_fresh(conn, stock["code"]) else None
+spinner = ("시세와 뉴스를 수집하고 분석하는 중입니다..."
+           if refresh or not (service.is_fresh(conn, stock["code"]) or service.recently_failed(conn, stock["code"]))
+           else None)
 if spinner:
     with st.spinner(spinner):
         view = service.get_view(conn, stock, summarizer, analyzer, force_refresh=refresh)

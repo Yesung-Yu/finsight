@@ -82,14 +82,14 @@ def allowed_by_robots(url: str) -> bool:
     return rp.can_fetch(USER_AGENT, url)
 
 
-def search_news(query: str, display: int = 20) -> list[dict]:
+def search_news(query: str, display: int = 20, start: int = 1) -> list[dict]:
     cid, secret = os.getenv("NAVER_CLIENT_ID"), os.getenv("NAVER_CLIENT_SECRET")
     if not cid or not secret:
         raise NewsApiError("NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 이 .env 에 설정되지 않았습니다.")
     url, id_header, secret_header = API.get(os.getenv("NAVER_API", "hub").lower(), API["hub"])
     resp = requests.get(
         url,
-        params={"query": query, "display": display, "sort": "date"},
+        params={"query": query, "display": display, "start": start, "sort": "date"},
         headers={id_header: cid, secret_header: secret},
         timeout=TIMEOUT,
     )
@@ -170,14 +170,44 @@ def press_from_url(url: str) -> str:
     return host[4:] if host.startswith("www.") else host
 
 
+# 기사에서 다른 이름으로 더 많이 쓰는 종목
+ALIASES = {"NAVER": ["네이버"], "LG에너지솔루션": ["LG엔솔"], "SK하이닉스": ["하이닉스"], "기아": ["기아차"]}
+
+
+def _name_pattern(stock_name: str) -> re.Pattern:
+    """종목명 뒤에 조사나 문장부호가 올 때만 일치한다. '카카오게임즈', '카카오맵' 같은 다른 이름은 제외."""
+    names = "|".join(re.escape(n) for n in [stock_name] + ALIASES.get(stock_name, []))
+    particle = "은|는|이|가|을|를|의|와|과|도|에|로|만|측|株"
+    return re.compile(rf"(?:{names})(?:(?=[^가-힣A-Za-z0-9])|$|(?={particle}))", re.IGNORECASE)
+
+
+def candidates(stock_name: str, items: list[dict]) -> list[dict]:
+    """제목에 종목명이 있는 기사를 먼저, 부족하면 요약문에만 있는 기사를 뒤에 둔다. 둘 다 없으면 제외."""
+    pattern = _name_pattern(stock_name)
+    in_title, in_desc = [], []
+    for it in items:
+        if pattern.search(it["title"]):
+            in_title.append(it)
+        elif pattern.search(it["description"]):
+            in_desc.append(it)
+    return in_title + in_desc
+
+
 def collect(stock_name: str, limit: int = 5, skip_url=lambda url: False) -> list[dict]:
     """종목 관련 최신 기사 limit건을 수집한다. skip_url(url)이 True면 이미 저장된 기사로 보고 건너뛴다."""
+    seen, unique = set(), []
+    for start in (1, 101):  # 후보가 모자라면 다음 100건까지 본다
+        for query in [stock_name] + ALIASES.get(stock_name, []):
+            for it in search_news(query, display=100, start=start):
+                if it["url"] not in seen:
+                    seen.add(it["url"])
+                    unique.append(it)
+        if len(candidates(stock_name, unique)) >= limit:
+            break
     results = []
-    for it in search_news(stock_name, display=30):
+    for it in candidates(stock_name, unique):
         if len(results) >= limit:
             break
-        if stock_name not in it["title"] and stock_name not in it["description"]:
-            continue  # 종목명이 제목·요약에 없는 기사는 관련성이 낮다
         if skip_url(it["url"]):
             results.append({**it, "cached": True})
             continue
