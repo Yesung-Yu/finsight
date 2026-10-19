@@ -1,0 +1,14 @@
+streamlit>=1.38
+plotly>=5.22
+pykrx>=1.0.47
+pandas>=2.0
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+python-dotenv>=1.0
+transformers>=4.44,<5
+sentencepiece
+protobuf
+# PyTorch(CPU): pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch
+pytest
