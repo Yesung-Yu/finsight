@@ -1,7 +1,7 @@
 """뉴스 수집 (FR-5).
 
 수집 대상: 네이버 금융·네이버 뉴스는 robots.txt가 전체 수집을 금지(Disallow: /)하므로 사용하지 않는다.
-대신 네이버 검색 API(뉴스)로 기사 목록을 받고, 본문은 원문 언론사 페이지에서
+대신 네이버 검색 API(뉴스, NAVER API HUB)로 기사 목록을 받고, 본문은 원문 언론사 페이지에서
 robots.txt 허용 여부를 확인한 뒤 1초 간격으로 가져온다.
 API 키는 프로젝트 최상위 .env 파일의 NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 으로 설정한다.
 """
@@ -21,7 +21,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_URL = "https://openapi.naver.com/v1/search/news.json"
+# 네이버 검색 API는 2026-07-31부터 개발자센터 신규 신청이 끝나고 NAVER API HUB(네이버클라우드)로 이관되었다.
+# 기본은 HUB를 쓰고, 예전 개발자센터 키(2027-06-30까지 동작)는 .env 에 NAVER_API=legacy 로 쓸 수 있다.
+API = {
+    "hub": ("https://naverapihub.apigw.ntruss.com/search/v1/news", "X-NCP-APIGW-API-KEY-ID", "X-NCP-APIGW-API-KEY"),
+    "legacy": ("https://openapi.naver.com/v1/search/news.json", "X-Naver-Client-Id", "X-Naver-Client-Secret"),
+}
 USER_AGENT = "FinSightBot/0.1 (student project; news summary demo)"
 REQUEST_DELAY = 1.0  # 요청 사이 지연(초)
 TIMEOUT = 10
@@ -81,16 +86,21 @@ def search_news(query: str, display: int = 20) -> list[dict]:
     cid, secret = os.getenv("NAVER_CLIENT_ID"), os.getenv("NAVER_CLIENT_SECRET")
     if not cid or not secret:
         raise NewsApiError("NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 이 .env 에 설정되지 않았습니다.")
+    url, id_header, secret_header = API.get(os.getenv("NAVER_API", "hub").lower(), API["hub"])
     resp = requests.get(
-        API_URL,
+        url,
         params={"query": query, "display": display, "sort": "date"},
-        headers={"X-Naver-Client-Id": cid, "X-Naver-Client-Secret": secret},
+        headers={id_header: cid, secret_header: secret},
         timeout=TIMEOUT,
     )
     if resp.status_code != 200:
         raise NewsApiError(f"네이버 검색 API 오류 {resp.status_code}: {resp.text[:200]}")
+    try:
+        data = resp.json()
+    except ValueError:
+        raise NewsApiError(f"네이버 검색 API 응답을 해석할 수 없습니다: {resp.text[:200]}")
     items = []
-    for it in resp.json().get("items", []):
+    for it in data.get("items", []):
         url = it.get("originallink") or it.get("link")
         try:
             published = parsedate_to_datetime(it["pubDate"]).strftime("%Y-%m-%d %H:%M:%S")

@@ -14,7 +14,7 @@ copy .env.example .env   # 메모장으로 열어 API 키 입력
 
 | 설정 | 필요 여부 | 발급처 |
 | --- | --- | --- |
-| `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` | 필수 (뉴스 수집) | [네이버 개발자센터](https://developers.naver.com/apps) → 애플리케이션 등록 → 사용 API "검색" |
+| `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` | 필수 (뉴스 수집) | [네이버클라우드 플랫폼](https://www.ncloud.com) 가입 → 콘솔의 NAVER API HUB → Application 등록 → "검색" API 선택 (개발자센터는 2026-07-31부터 검색 API 신규 신청 불가) |
 | `KRX_ID`, `KRX_PW` | 선택 (전체 종목 검색, 시가총액·PER·PBR) | [KRX 정보데이터시스템](https://data.krx.co.kr) 무료 회원가입 |
 
 KRX 계정이 없으면 내장 시연 종목 10개만 이름으로 검색되고(6자리 코드 검색은 모든 종목 가능), 시가총액·PER·PBR은 "-"로 표시됩니다.
