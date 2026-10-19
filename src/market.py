@@ -9,11 +9,12 @@ from __future__ import annotations
 import contextlib
 import io
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
 
-load_dotenv()  # pykrx가 import 시점에 KRX_ID/KRX_PW를 읽으므로 먼저 불러온다
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")  # pykrx가 import 시점에 KRX_ID/KRX_PW를 읽으므로 먼저
 
 with contextlib.redirect_stdout(io.StringIO()):  # pykrx의 로그인 안내 출력 숨김
     from pykrx import stock as krx
@@ -56,10 +57,14 @@ def _num(value) -> float | None:
 
 
 # ---------- FR-1 종목 목록 ----------
+STOCK_LIST_MAX_AGE = timedelta(days=7)
+
+
 def ensure_stock_list(conn) -> int:
-    """종목 목록을 DB에 채운다. KRX 로그인이 안 되면 시연 종목만 넣는다."""
+    """종목 목록을 DB에 채운다. 7일마다 새로 받고, KRX 로그인이 안 되면 시연 종목만 넣는다."""
     db.save_stocks(conn, DEMO_STOCKS)
-    if db.count_stocks(conn) > len(DEMO_STOCKS):
+    updated = db.get_meta(conn, "stock_list_updated")
+    if updated and datetime.now() - datetime.fromisoformat(updated) < STOCK_LIST_MAX_AGE:
         return db.count_stocks(conn)
     rows = []
     try:
@@ -68,8 +73,9 @@ def ensure_stock_list(conn) -> int:
                 rows.append((code, _quiet(krx.get_market_ticker_name, code), market))
     except Exception:
         rows = []
-    if rows:
+    if len(rows) > 1000:  # 로그인 실패 시 빈 목록이 오므로 충분히 받았을 때만 기록
         db.save_stocks(conn, rows)
+        db.set_meta(conn, "stock_list_updated", db.now_str())
     return db.count_stocks(conn)
 
 

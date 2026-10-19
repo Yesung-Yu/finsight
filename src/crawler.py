@@ -12,6 +12,7 @@ import os
 import re
 import time
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from urllib import robotparser
 from urllib.parse import urlparse
 
@@ -19,7 +20,7 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # 네이버 검색 API는 2026-07-31부터 개발자센터 신규 신청이 끝나고 NAVER API HUB(네이버클라우드)로 이관되었다.
 # 기본은 HUB를 쓰고, 예전 개발자센터 키(2027-06-30까지 동작)는 .env 에 NAVER_API=legacy 로 쓸 수 있다.
