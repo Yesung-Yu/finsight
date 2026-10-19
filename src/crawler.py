@@ -1,0 +1,181 @@
+"""뉴스 수집 (FR-5).
+
+수집 대상: 네이버 금융·네이버 뉴스는 robots.txt가 전체 수집을 금지(Disallow: /)하므로 사용하지 않는다.
+대신 네이버 검색 API(뉴스)로 기사 목록을 받고, 본문은 원문 언론사 페이지에서
+robots.txt 허용 여부를 확인한 뒤 1초 간격으로 가져온다.
+API 키는 프로젝트 최상위 .env 파일의 NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 으로 설정한다.
+"""
+from __future__ import annotations
+
+import html
+import os
+import re
+import time
+from email.utils import parsedate_to_datetime
+from urllib import robotparser
+from urllib.parse import urlparse
+
+import requests
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+
+load_dotenv()
+
+API_URL = "https://openapi.naver.com/v1/search/news.json"
+USER_AGENT = "FinSightBot/0.1 (student project; news summary demo)"
+REQUEST_DELAY = 1.0  # 요청 사이 지연(초)
+TIMEOUT = 10
+
+# 언론사 본문 영역으로 자주 쓰이는 선택자
+BODY_SELECTORS = [
+    "[itemprop=articleBody]", "#articleBody", "#article-view-content-div", "#articletxt",
+    "#news_body_area", "#article_body", "#articeBody", ".article_body", ".article-body",
+    ".news_body", ".view_con", ".art_txt", "#textBody", ".article_txt", "#newsEndContents",
+    "article",
+]
+
+_robots_cache: dict[str, robotparser.RobotFileParser | None] = {}
+_last_request = 0.0
+
+
+class NewsApiError(RuntimeError):
+    pass
+
+
+def _wait() -> None:
+    global _last_request
+    gap = time.monotonic() - _last_request
+    if gap < REQUEST_DELAY:
+        time.sleep(REQUEST_DELAY - gap)
+    _last_request = time.monotonic()
+
+
+def _clean(text: str) -> str:
+    text = re.sub(r"<[^>]+>", "", text or "")
+    return html.unescape(text).strip()
+
+
+def allowed_by_robots(url: str) -> bool:
+    parts = urlparse(url)
+    base = f"{parts.scheme}://{parts.netloc}"
+    if base not in _robots_cache:
+        rp = robotparser.RobotFileParser()
+        try:
+            resp = requests.get(base + "/robots.txt", headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+            if resp.status_code >= 400:
+                rp = None  # robots.txt 없음 → 제한 없음
+            else:
+                rp.parse(resp.text.splitlines())
+        except requests.RequestException:
+            rp = False  # 확인 실패 → 안전하게 수집하지 않음
+        _robots_cache[base] = rp
+    rp = _robots_cache[base]
+    if rp is None:
+        return True
+    if rp is False:
+        return False
+    return rp.can_fetch(USER_AGENT, url)
+
+
+def search_news(query: str, display: int = 20) -> list[dict]:
+    cid, secret = os.getenv("NAVER_CLIENT_ID"), os.getenv("NAVER_CLIENT_SECRET")
+    if not cid or not secret:
+        raise NewsApiError("NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 이 .env 에 설정되지 않았습니다.")
+    resp = requests.get(
+        API_URL,
+        params={"query": query, "display": display, "sort": "date"},
+        headers={"X-Naver-Client-Id": cid, "X-Naver-Client-Secret": secret},
+        timeout=TIMEOUT,
+    )
+    if resp.status_code != 200:
+        raise NewsApiError(f"네이버 검색 API 오류 {resp.status_code}: {resp.text[:200]}")
+    items = []
+    for it in resp.json().get("items", []):
+        url = it.get("originallink") or it.get("link")
+        try:
+            published = parsedate_to_datetime(it["pubDate"]).strftime("%Y-%m-%d %H:%M:%S")
+        except (KeyError, TypeError, ValueError):
+            published = None
+        items.append({
+            "title": _clean(it.get("title", "")),
+            "url": url,
+            "published_at": published,
+            "description": _clean(it.get("description", "")),
+        })
+    return items
+
+
+def _extract_body(soup: BeautifulSoup) -> str:
+    for tag in soup(["script", "style", "noscript", "iframe", "figure", "figcaption", "table", "aside"]):
+        tag.decompose()
+    for sel in BODY_SELECTORS:
+        node = soup.select_one(sel)
+        if node:
+            text = node.get_text("\n", strip=True)
+            if len(text) > 200:
+                return text
+    # 선택자가 맞지 않으면 <p> 글자가 가장 많은 블록을 본문으로 본다
+    best, best_len = "", 0
+    for div in soup.find_all(["div", "section"]):
+        ps = div.find_all("p", recursive=False)
+        text = "\n".join(p.get_text(" ", strip=True) for p in ps)
+        if len(text) > best_len:
+            best, best_len = text, len(text)
+    return best
+
+
+def _clean_body(text: str) -> str:
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or "@" in line and len(line) < 60:  # 기자 이메일 줄
+            continue
+        if re.search(r"무단\s*전재|재배포\s*금지|Copyright|ⓒ|©", line):
+            continue
+        lines.append(line)
+    text = re.sub(r"\[[^\]]{0,20}기자\]|\([^)]{0,30}=\S{0,10}\)", " ", " ".join(lines))  # [홍길동 기자], (서울=연합뉴스)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def fetch_article(url: str) -> tuple[str | None, str | None]:
+    """(언론사명, 본문). 수집할 수 없으면 (None, None)."""
+    if not url or not allowed_by_robots(url):
+        return None, None
+    _wait()
+    try:
+        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return None, None
+    resp.encoding = resp.apparent_encoding if resp.encoding in (None, "ISO-8859-1") else resp.encoding
+    soup = BeautifulSoup(resp.text, "lxml")
+    site = soup.find("meta", property="og:site_name")
+    press = site["content"].strip() if site and site.get("content") else None
+    body = _clean_body(_extract_body(soup))
+    return press, (body if len(body) > 100 else None)
+
+
+def press_from_url(url: str) -> str:
+    host = urlparse(url).netloc.lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def collect(stock_name: str, limit: int = 5, skip_url=lambda url: False) -> list[dict]:
+    """종목 관련 최신 기사 limit건을 수집한다. skip_url(url)이 True면 이미 저장된 기사로 보고 건너뛴다."""
+    results = []
+    for it in search_news(stock_name, display=30):
+        if len(results) >= limit:
+            break
+        if stock_name not in it["title"] and stock_name not in it["description"]:
+            continue  # 종목명이 제목·요약에 없는 기사는 관련성이 낮다
+        if skip_url(it["url"]):
+            results.append({**it, "cached": True})
+            continue
+        press, body = fetch_article(it["url"])
+        results.append({
+            **it,
+            "press": press or press_from_url(it["url"]),
+            "body": body or it["description"],  # 본문을 못 가져오면 API 요약 문구로 대체
+            "cached": False,
+        })
+    return results
