@@ -27,7 +27,7 @@ def main(queries: list[str]) -> None:
             continue
         t = time.time()
         errors = service.update_stock(conn, stock, summarizer, analyzer)
-        news = db.load_news(conn, stock["code"], service.NEWS_LIMIT)
+        news = service.latest_news(conn, stock["code"])
         analyzed = sum(1 for n in news if n["summary"] is not None)
         status = "OK" if not errors else "; ".join(errors)
         print(f"- {stock['name']}({stock['code']}): 시세 {len(db.load_prices(conn, stock['code']))}일, "

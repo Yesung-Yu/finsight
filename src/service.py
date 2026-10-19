@@ -52,11 +52,17 @@ def load_models():
     return tuple(loaded)
 
 
+def latest_news(conn, code: str, limit: int = NEWS_LIMIT) -> list[dict]:
+    """화면에 보여 줄 최신 기사. 비슷한 제목의 기사는 하나로 합친다."""
+    stock = db.get_stock(conn, code)
+    return crawler.dedupe(db.load_news(conn, code, limit * 10), stock["name"])[:limit]
+
+
 def analyze_pending(conn, code: str, summarizer, analyzer, limit: int = NEWS_LIMIT) -> None:
     """아직 요약·판정하지 않은 기사를 처리한다. 같은 기사는 다시 처리하지 않는다 (FR-6, FR-7)."""
     if summarizer is None or analyzer is None:
         return
-    for n in db.load_news(conn, code, limit):
+    for n in latest_news(conn, code, limit):
         if n["summary"] is not None:
             continue
         summary = summarizer.summarize(n["body"] or n["title"])
@@ -136,7 +142,7 @@ def get_view(conn, stock, summarizer=None, analyzer=None, force_refresh: bool = 
         prices=prices,
         quote=market.quote(prices),
         fundamentals=db.load_latest_fundamentals(conn, code),
-        news=db.load_news(conn, code, NEWS_LIMIT),
+        news=latest_news(conn, code),
         from_cache=not fetched,
         updated_at=db.get_meta(conn, f"updated:{code}"),
         errors=errors,

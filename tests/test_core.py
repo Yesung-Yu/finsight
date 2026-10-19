@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import db, market, service, ui  # noqa: E402
-from src.crawler import _clean, _clean_body, candidates  # noqa: E402
+from src.crawler import _clean, _clean_body, candidates, dedupe, is_similar  # noqa: E402
 from src.summarizer import split_lines  # noqa: E402
 
 
@@ -97,6 +97,22 @@ def test_candidates_exclude_longer_names():
     items = [{"title": t, "description": "", "url": str(i)} for i, t in enumerate(
         ["카카오게임즈 신작", "카카오맵 단풍 지도", "카카오, 3분기 실적", "카카오는 AI에 투자", "‘카카오’ 주가 반등", "AI 키우는 카카오"])]
     assert [it["url"] for it in candidates("카카오", items)] == ["2", "3", "4", "5"]
+
+
+def test_similar_titles_merged():
+    # 실제 수집된 제목 (2026-10-19)
+    assert is_similar("[비즈투데이] 삼성전자, 99개 기업에 기술 126건 무상 나눔", "삼성전자, 중기에 126건 기술나눔", "삼성전자")
+    assert is_similar("에코프로비엠 유증 청약률 103.25%…삼성SDI 웃돌아", "에코프로비엠, 유상증자 청약률 103.25%", "에코프로비엠")
+    assert not is_similar("삼성전자 DX 노조 \"이재용 회장, 직접 대화해달라\"", "삼성전자, 중기에 126건 기술나눔", "삼성전자")
+    assert not is_similar("장 초반 3% 급락 딛고 웃었다…코스피 5768선 ‘반전 마감’",
+                          "이틀 연속 상승세, 코스피 코스닥 활짝 웃었다 - 이차전지 관련주 강세", "삼성전자")
+    items = [{"title": t} for t in ["삼성전자, 중기에 126건 기술나눔", "삼성전자 특허 126건 ‘통 큰 나눔’…중소기업 99곳에 무료 이전",
+                                    "삼성전자 DX 노조 \"이재용 회장, 직접 대화해달라\""]]
+    assert [it["title"][:8] for it in dedupe(items, "삼성전자")] == ["삼성전자, 중기", "삼성전자 DX "]
+
+
+def test_short_titles_need_near_match():
+    assert not is_similar("삼성전자 주가", "삼성전자 주가 급락 우려", "삼성전자")
 
 
 def test_text_cleaning():

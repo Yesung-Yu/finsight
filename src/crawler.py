@@ -193,6 +193,42 @@ def candidates(stock_name: str, items: list[dict]) -> list[dict]:
     return in_title + in_desc
 
 
+SIMILAR_THRESHOLD = 0.4  # 실제 기사로 확인: 같은 사건 0.4 이상, 다른 기사 0.2 이하
+# 기사 제목에 자주 쓰는 줄임말 → 원래 말 (비교할 때만 사용)
+TITLE_SYNONYMS = {"유증": "유상증자", "영업익": "영업이익", "순익": "순이익", "목표가": "목표주가", "자사주": "자기주식"}
+
+
+def _title_grams(title: str, stock_name: str) -> set[str]:
+    """제목에서 말머리·종목명·기호를 빼고 두 글자씩 자른 조각."""
+    text = re.sub(r"\[[^\]]*\]", " ", title)
+    for n in [stock_name] + ALIASES.get(stock_name, []):
+        text = re.sub(re.escape(n), " ", text, flags=re.IGNORECASE)
+    for short, full in TITLE_SYNONYMS.items():
+        text = re.sub(rf"{short}(?![가-힣])", full, text)
+    text = re.sub(r"[^가-힣A-Za-z0-9]", "", text).lower()
+    return {text[i:i + 2] for i in range(len(text) - 1)}
+
+
+def is_similar(title_a: str, title_b: str, stock_name: str) -> bool:
+    """같은 사건을 다룬 기사인지 제목으로 판단한다."""
+    a, b = _title_grams(title_a, stock_name), _title_grams(title_b, stock_name)
+    if not a or not b:
+        return title_a == title_b
+    common = len(a & b)
+    if min(len(a), len(b)) < 4:  # 아주 짧은 제목은 거의 같을 때만 같은 기사로 본다
+        return common / len(a | b) >= 0.8
+    return common / min(len(a), len(b)) >= SIMILAR_THRESHOLD
+
+
+def dedupe(items: list[dict], stock_name: str) -> list[dict]:
+    """비슷한 제목의 기사를 하나로 합친다. 앞에 있는(최신) 기사를 남긴다."""
+    kept: list[dict] = []
+    for it in items:
+        if not any(is_similar(it["title"], k["title"], stock_name) for k in kept):
+            kept.append(it)
+    return kept
+
+
 def collect(stock_name: str, limit: int = 5, skip_url=lambda url: False) -> list[dict]:
     """종목 관련 최신 기사 limit건을 수집한다. skip_url(url)이 True면 이미 저장된 기사로 보고 건너뛴다."""
     seen, unique = set(), []
@@ -202,10 +238,10 @@ def collect(stock_name: str, limit: int = 5, skip_url=lambda url: False) -> list
                 if it["url"] not in seen:
                     seen.add(it["url"])
                     unique.append(it)
-        if len(candidates(stock_name, unique)) >= limit:
+        if len(dedupe(candidates(stock_name, unique), stock_name)) >= limit:
             break
     results = []
-    for it in candidates(stock_name, unique):
+    for it in dedupe(candidates(stock_name, unique), stock_name):
         if len(results) >= limit:
             break
         if skip_url(it["url"]):
