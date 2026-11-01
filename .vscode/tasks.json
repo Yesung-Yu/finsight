@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "일반 실행 (localhost)",
+      "type": "shell",
+      "command": ".\\.venv\\Scripts\\streamlit.exe run app.py",
+      "problemMatcher": []
+    },
+    {
+      "label": "전시 서버 (터널)",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\serve_kiosk.ps1 -Tunnel",
+      "problemMatcher": []
+    },
+    {
+      "label": "전시 서버 (핫스팟)",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\serve_kiosk.ps1",
+      "problemMatcher": []
+    },
+    {
+      "label": "캐시 채우기 (시연 종목)",
+      "type": "shell",
+      "command": ".\\.venv\\Scripts\\python.exe scripts\\warm_cache.py",
+      "problemMatcher": []
+    }
+  ]
+}
