@@ -23,7 +23,9 @@ TOOLTIPS = {
 
 CSS = """
 <style>
-.block-container {padding-top: 2.2rem; padding-bottom: 1rem;}
+[data-testid="stToolbar"], [data-testid="stDecoration"] {display: none !important;}
+[data-testid="stHeader"] {height: 2.5rem !important; background: transparent !important;}
+.stMainBlockContainer.block-container {padding-top: 2.5rem !important; padding-bottom: 1rem !important;}
 .fs-header {text-align: right; color: #6b7280; font-size: 0.95rem; padding-top: 0.55rem;}
 .fs-name {font-size: 1.75rem; font-weight: 700; margin: 0;}
 .fs-sub {color: #6b7280; font-size: 0.95rem; margin-left: 0.4rem;}
@@ -40,7 +42,7 @@ CSS = """
 .fs-title a {font-weight: 650; font-size: 1.02rem; color: inherit; text-decoration: none;}
 .fs-title a:hover {text-decoration: underline;}
 .fs-meta {color: #6b7280; font-size: 0.82rem; margin: 0.15rem 0 0.35rem;}
-.fs-summary {margin: 0 0 0.3rem 1.1rem; padding: 0; font-size: 0.93rem;}
+.fs-summary {margin: 0 0 0.3rem 0; padding: 0; list-style: none; font-size: 0.93rem;}
 .fs-summary li {margin-bottom: 0.15rem;}
 .fs-judge {color: #6b7280; font-size: 0.82rem;}
 .fs-footer {color: #9ca3af; font-size: 0.8rem; text-align: center; margin-top: 1.5rem;
