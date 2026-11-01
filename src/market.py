@@ -35,6 +35,20 @@ DEMO_STOCKS = [
     ("196170", "알테오젠", "KOSDAQ"),
 ]
 
+# 초기 화면 버튼에는 넣지 않고, 관람객이 많이 찾을 만한 종목을 미리 캐시하는 데만 쓴다.
+WARM_EXTRA_STOCKS = [
+    ("352820", "하이브", "KOSPI"),
+    ("323410", "카카오뱅크", "KOSPI"),
+    ("207940", "삼성바이오로직스", "KOSPI"),
+    ("005490", "POSCO홀딩스", "KOSPI"),
+    ("105560", "KB금융", "KOSPI"),
+    ("055550", "신한지주", "KOSPI"),
+    ("012330", "현대모비스", "KOSPI"),
+    ("259960", "크래프톤", "KOSPI"),
+    ("012450", "한화에어로스페이스", "KOSPI"),
+    ("051910", "LG화학", "KOSPI"),
+]
+
 PRICE_COLUMNS = {"시가": "open", "고가": "high", "저가": "low", "종가": "close", "거래량": "volume"}
 
 
@@ -62,7 +76,7 @@ STOCK_LIST_MAX_AGE = timedelta(days=7)
 
 def ensure_stock_list(conn) -> int:
     """종목 목록을 DB에 채운다. 7일마다 새로 받고, KRX 로그인이 안 되면 시연 종목만 넣는다."""
-    db.save_stocks(conn, DEMO_STOCKS)
+    db.save_stocks(conn, DEMO_STOCKS + WARM_EXTRA_STOCKS)
     updated = db.get_meta(conn, "stock_list_updated")
     if updated and datetime.now() - datetime.fromisoformat(updated) < STOCK_LIST_MAX_AGE:
         return db.count_stocks(conn)

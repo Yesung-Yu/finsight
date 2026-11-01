@@ -3,6 +3,7 @@
 실행: streamlit run app.py
 """
 import os
+import threading
 
 import streamlit as st
 
@@ -24,6 +25,12 @@ def get_conn():
 @st.cache_resource(show_spinner="요약·감성 분석 모델을 불러오는 중입니다... (처음 한 번만)")
 def get_models():
     return service.load_models()
+
+
+@st.cache_resource
+def get_collect_lock():
+    """새 종목 수집·분석은 한 번에 하나씩만 돌린다. 여러 관람객이 동시에 검색해도 PC가 멈추지 않게 한다."""
+    return threading.Lock()
 
 
 conn = get_conn()
@@ -85,12 +92,16 @@ if stock is None:
             col.button(s["name"], key=f"similar-{s['code']}", on_click=pick, args=(s["name"],))
     finish()
 
-spinner = ("시세와 뉴스를 수집하고 분석하는 중입니다..."
+spinner = ("처음 검색하는 종목입니다. 시세와 뉴스를 수집하고 분석하는 중입니다... (최대 1분 정도 걸립니다)"
            if refresh or not (service.is_fresh(conn, stock["code"]) or service.recently_failed(conn, stock["code"]))
            else None)
 if spinner:
+    lock = get_collect_lock()
+    if lock.locked():
+        st.caption("다른 종목을 분석하고 있어서 순서를 기다리는 중입니다.")
     with st.spinner(spinner):
-        view = service.get_view(conn, stock, summarizer, analyzer, force_refresh=refresh)
+        with lock:  # 기다리는 동안 다른 사람이 같은 종목을 끝냈다면 get_view가 캐시를 그대로 쓴다
+            view = service.get_view(conn, stock, summarizer, analyzer, force_refresh=refresh)
 else:
     view = service.get_view(conn, stock, summarizer, analyzer)
 

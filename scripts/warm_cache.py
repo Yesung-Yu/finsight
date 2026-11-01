@@ -1,6 +1,6 @@
 """전시 전 시연 종목의 시세·뉴스·요약·판정을 미리 채운다 (FR-8).
 
-실행: python scripts/warm_cache.py            # 내장 시연 종목 10개
+실행: python scripts/warm_cache.py            # 시연 종목 10개 + 추가 종목 10개
       python scripts/warm_cache.py 삼성전자 카카오  # 원하는 종목만
 """
 import sys
@@ -19,7 +19,7 @@ def main(queries: list[str]) -> None:
     summarizer, analyzer = service.load_models()
     if summarizer is None or analyzer is None:
         print("! 모델을 불러오지 못했습니다. 인터넷 연결을 확인하세요.")
-    targets = queries or [name for _, name, _ in market.DEMO_STOCKS]
+    targets = queries or [name for _, name, _ in market.DEMO_STOCKS + market.WARM_EXTRA_STOCKS]
     for q in targets:
         stock = market.resolve(conn, q)
         if stock is None:
