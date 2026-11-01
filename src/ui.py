@@ -23,7 +23,7 @@ TOOLTIPS = {
 
 CSS = """
 <style>
-[data-testid="stToolbar"], [data-testid="stDecoration"] {display: none !important;}
+[data-testid="stToolbarActions"], [data-testid="stDecoration"] {display: none !important;}
 [data-testid="stHeader"] {height: 2.5rem !important; background: transparent !important;}
 .stMainBlockContainer.block-container {padding-top: 2.5rem !important; padding-bottom: 1rem !important;}
 .fs-header {text-align: right; color: #6b7280; font-size: 0.95rem; padding-top: 0.55rem;}
@@ -117,11 +117,14 @@ def price_chart(prices: pd.DataFrame, period: str) -> None:
     ))
     fig.update_layout(
         height=300, margin=dict(l=8, r=8, t=8, b=8), showlegend=False,
-        xaxis=dict(tickformat="%m/%d", showgrid=False),
-        yaxis=dict(tickformat=",", gridcolor="rgba(128,128,128,0.18)"),
+        # 휴대폰에서 스크롤하다 차트가 확대·이동되지 않도록 줌과 드래그를 막는다.
+        xaxis=dict(tickformat="%m/%d", showgrid=False, fixedrange=True),
+        yaxis=dict(tickformat=",", gridcolor="rgba(128,128,128,0.18)", fixedrange=True),
+        dragmode=False,
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", hovermode="x unified",
     )
-    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False, "scrollZoom": False,
+                                                  "doubleClick": False})
 
 
 def indicator_cards(fund: dict | None, quote: dict | None) -> None:

@@ -2,9 +2,13 @@
 
 실행: streamlit run app.py
 """
+import os
+
 import streamlit as st
 
 from src import db, market, service, ui
+
+KIOSK = os.environ.get("FINSIGHT_KIOSK") == "1"  # 전시 모드: 여러 명이 접속하므로 새로고침 버튼을 숨긴다
 
 st.set_page_config(page_title="주식 뉴스 요약 · 투자 보조", page_icon="📈", layout="wide")
 ui.inject_css()
@@ -47,15 +51,17 @@ def finish() -> None:
 
 # ---------- 사이드바 (FR-9) ----------
 with st.sidebar:
-    st.subheader("관리")
-    refresh = st.button("데이터 새로고침", width="stretch", type="primary",
-                        help="선택한 종목의 시세와 뉴스를 다시 수집합니다.")
+    refresh = False
+    if not KIOSK:
+        st.subheader("관리")
+        refresh = st.button("데이터 새로고침", width="stretch", type="primary",
+                            help="선택한 종목의 시세와 뉴스를 다시 수집합니다.")
     if summarizer is None or analyzer is None:
         st.warning("AI 모델을 불러오지 못해 새 뉴스는 요약·판정 없이 표시됩니다.")
     cached_box = st.container()
 
 # ---------- 상단 검색 (FR-1) ----------
-top_left, top_right = st.columns([3, 2])
+top_left, top_right = st.columns([11, 10], gap="large")  # 아래 2단과 같은 비율로 맞춘다
 with top_left:
     query = st.text_input("종목 검색", key="query", placeholder="종목명 또는 종목코드 (예: 삼성전자, 005930)",
                           label_visibility="collapsed")
@@ -89,14 +95,14 @@ else:
     view = service.get_view(conn, stock, summarizer, analyzer)
 
 if view.prices.empty and not view.news:
-    st.error("데이터를 가져오지 못했고 저장된 데이터도 없습니다. 인터넷 연결을 확인한 뒤 '데이터 새로고침'을 눌러 주세요.")
+    st.error("데이터를 가져오지 못했고 저장된 데이터도 없습니다. 인터넷 연결을 확인해 주세요."
+             if KIOSK else
+             "데이터를 가져오지 못했고 저장된 데이터도 없습니다. 인터넷 연결을 확인한 뒤 '데이터 새로고침'을 눌러 주세요.")
     for e in view.errors:
         st.caption(e)
     finish()
 
-# ---------- 캐시 안내 (FR-8) ----------
-if view.from_cache and view.updated_at:
-    st.info(f"저장된 데이터 ({view.updated_at[:10]} 기준)", icon="💾")
+# ---------- 수집 오류 안내 ----------
 for e in view.errors:
     st.caption(f"⚠️ {e}")
 

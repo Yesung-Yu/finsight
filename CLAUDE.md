@@ -48,6 +48,13 @@
 - SQLite에 저장한다. 오늘 갱신한 종목은 다시 수집하지 않는다.
 - 연결 확인은 1초 제한의 소켓 검사로 한다. 실패한 종목은 10분 동안 재시도하지 않는다.
 
+### 전시 모드 (휴대폰 접속)
+- 핫스팟에 연결한 PC에서 `.\scripts\serve_kiosk.ps1`을 실행하면 `FINSIGHT_KIOSK=1`, `--server.address 0.0.0.0`으로 서버가 뜨고 접속 주소 QR(`qr.png`, Git 제외)이 만들어진다.
+- 관람객이 와이파이를 바꾸지 않게 하려면 `.\scripts\serve_kiosk.ps1 -Tunnel`을 쓴다. `cloudflared`(winget으로 설치) 임시 터널이 `https://*.trycloudflare.com` 주소를 만들고 QR이 그 주소를 가리킨다. 서버는 localhost에만 열린다. PC만 인터넷에 연결되면 되고, 주소는 실행할 때마다 바뀐다.
+- 전시 모드에서는 "데이터 새로고침" 버튼이 숨겨진다. 여러 명이 동시에 수집·모델 연산을 일으키지 않게 하려는 것이다.
+- 행사장 와이파이는 기기 간 통신을 막는 경우가 많아 핫스팟을 쓴다. Windows 방화벽에서 개인 네트워크 접속을 허용해야 한다.
+- 사이드바를 여는 버튼이 `stToolbar` 안에 있으므로 툴바 전체가 아니라 `stToolbarActions`만 숨긴다.
+
 ## 구현 시 주의
 
 - `save_prices`에서 값을 `float`/`int`로 변환한다. numpy 정수를 그대로 넣으면 SQLite에 blob으로 저장된다.

@@ -11,4 +11,5 @@ sentencepiece
 protobuf
 # PyTorch(CPU): pip install torch --index-url https://download.pytorch.org/whl/cpu
 torch
+qrcode[pil]
 pytest
