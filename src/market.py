@@ -16,8 +16,11 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")  # pykrx가 import 시점에 KRX_ID/KRX_PW를 읽으므로 먼저
 
-with contextlib.redirect_stdout(io.StringIO()):  # pykrx의 로그인 안내 출력 숨김
-    from pykrx import stock as krx
+try:
+    with contextlib.redirect_stdout(io.StringIO()):  # pykrx의 로그인 안내 출력 숨김
+        from pykrx import stock as krx
+except Exception:  # KRX 계정이 있으면 import 때 로그인하므로 오프라인에서는 실패한다. 캐시로 계속 동작한다.
+    krx = None
 
 from src import db
 
@@ -116,6 +119,8 @@ def resolve(conn, query: str):
 # ---------- FR-2~4 시세·지표 ----------
 def fetch_prices(code: str, days: int = 400) -> pd.DataFrame:
     """최근 days일 일별 시세. 실패하면 예외."""
+    if krx is None:
+        raise RuntimeError("KRX에 연결하지 못했습니다. 인터넷 연결 후 앱을 다시 실행해 주세요.")
     end = datetime.now()
     df = _quiet(krx.get_market_ohlcv, _ymd(end - timedelta(days=days)), _ymd(end), code)
     if df is None or df.empty:

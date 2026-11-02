@@ -1,4 +1,5 @@
 """외부 요청·모델 없이 돌아가는 단위 테스트. 실행: python -m pytest"""
+import importlib
 import sys
 from pathlib import Path
 
@@ -119,3 +120,15 @@ def test_text_cleaning():
     assert _clean("<b>삼성전자</b> &quot;실적&quot;") == '삼성전자 "실적"'
     assert "무단" not in _clean_body("본문입니다.\n홍길동 기자 hong@a.com\n무단전재 및 재배포 금지")
     assert split_lines("삼성전자가 3분기 3분기 실적을 냈다. 삼성전자가 3분기 실적을 냈다.") == ["삼성전자가 3분기 실적을 냈다."]
+
+
+def test_market_loads_when_pykrx_import_fails(monkeypatch):
+    """오프라인에서 pykrx 로그인이 실패해도 앱은 캐시로 떠야 한다."""
+    with monkeypatch.context() as m:
+        m.setitem(sys.modules, "pykrx", None)
+        importlib.reload(market)
+        assert market.krx is None
+        with pytest.raises(RuntimeError):
+            market.fetch_prices("005930")
+    importlib.reload(market)
+    assert market.krx is not None
