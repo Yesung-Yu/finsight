@@ -25,8 +25,7 @@ CSS = """
 <style>
 [data-testid="stToolbarActions"], [data-testid="stDecoration"] {display: none !important;}
 [data-testid="stHeader"] {height: 2.5rem !important; background: transparent !important;}
-.stMainBlockContainer.block-container {padding-top: 2.5rem !important; padding-bottom: 1rem !important;}
-.fs-header {text-align: right; color: #6b7280; font-size: 0.95rem; padding-top: 0.55rem;}
+.stMainBlockContainer.block-container {padding-top: 1.75rem !important; padding-bottom: 1rem !important;}
 .fs-name {font-size: 1.75rem; font-weight: 700; margin: 0;}
 .fs-sub {color: #6b7280; font-size: 0.95rem; margin-left: 0.4rem;}
 .fs-price {font-size: 2.1rem; font-weight: 700; line-height: 1.2;}
@@ -47,6 +46,30 @@ CSS = """
 .fs-judge {color: #6b7280; font-size: 0.82rem;}
 .fs-footer {color: #9ca3af; font-size: 0.8rem; text-align: center; margin-top: 1.5rem;
             border-top: 1px solid rgba(128,128,128,0.2); padding-top: 0.7rem;}
+/* 스크롤 없이 투자 지표까지 보이도록 카드를 낮게 만들고, 좁아도 값이 잘리지 않게 줄바꿈을 허용한다. */
+.st-key-fs-indicator-cards {gap: 0.5rem !important;}
+.st-key-fs-indicator-cards [data-testid="stMetric"] {padding: 0 !important;}
+.st-key-fs-indicator-cards [data-testid="stMetric"] > div {padding: 0.45rem 0.6rem !important;}
+.st-key-fs-indicator-cards [data-testid="stMetricLabel"] p {font-size: 0.88rem !important;}
+.st-key-fs-indicator-cards [data-testid="stMetricValue"] {font-size: 1.2rem !important; font-weight: 700; padding: 0 !important;}
+.st-key-fs-indicator-cards [data-testid="stMetricValue"] p {white-space: normal !important; line-height: 1.3 !important;}
+@media (max-width: 1365px) {
+    .st-key-fs-indicator-cards [data-testid="stMetricValue"] {font-size: 1.05rem !important;}
+}
+.fs-list {display: none;}
+.fs-list details {border-bottom: 1px solid rgba(128,128,128,0.2);}
+.fs-list summary {display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+                  padding: 0.5rem 0.1rem; cursor: pointer; list-style: none;}
+.fs-list summary::-webkit-details-marker {display: none;}
+.fs-list-label {color: #6b7280; font-size: 0.92rem; white-space: nowrap;}
+.fs-list-label::after {content: " ⓘ"; font-size: 0.75rem; opacity: 0.7;}
+.fs-list-value {font-weight: 700; font-size: 1.02rem; text-align: right;}
+.fs-list p {color: #6b7280; font-size: 0.82rem; margin: 0 0.1rem 0.5rem; padding: 0;}
+/* Streamlit이 st.columns를 한 줄로 쌓는 폭에서 카드 대신 목록을 보여 준다. */
+@media (max-width: 640px) {
+    .st-key-fs-indicator-cards {display: none !important;}
+    .fs-list {display: block;}
+}
 </style>
 """
 
@@ -68,6 +91,13 @@ def big_won(v) -> str:
     if jo:
         return f"{jo:,}조 {eok:,}억원" if eok else f"{jo:,}조원"
     return f"{eok:,}억원"
+
+
+def big_won_short(v) -> str:
+    """좁은 PC 카드용 시가총액: 1조 이상은 소수 첫째 자리까지만"""
+    if v is None or v < 1e12:
+        return big_won(v)
+    return f"{v / 1e12:,.1f}조원"
 
 
 def times(v) -> str:
@@ -116,7 +146,7 @@ def price_chart(prices: pd.DataFrame, period: str) -> None:
         hovertemplate="%{x|%Y-%m-%d}<br>종가 %{y:,.0f}원<extra></extra>",
     ))
     fig.update_layout(
-        height=300, margin=dict(l=8, r=8, t=8, b=8), showlegend=False,
+        height=230, margin=dict(l=8, r=8, t=8, b=8), showlegend=False,
         # 휴대폰에서 스크롤하다 차트가 확대·이동되지 않도록 줌과 드래그를 막는다.
         xaxis=dict(tickformat="%m/%d", showgrid=False, fixedrange=True),
         yaxis=dict(tickformat=",", gridcolor="rgba(128,128,128,0.18)", fixedrange=True),
@@ -138,9 +168,19 @@ def indicator_cards(fund: dict | None, quote: dict | None) -> None:
         "52주 최저": won(fund.get("low_52w")),
     }
     items = list(values.items())
-    for row in (items[:3], items[3:]):
-        for col, (label, value) in zip(st.columns(3), row):
-            col.metric(label, value, help=TOOLTIPS[label], border=True)
+    with st.container(key="fs-indicator-cards"):
+        for row in (items[:3], items[3:]):
+            for col, (label, value) in zip(st.columns(3), row):
+                if label == "시가총액":
+                    value = big_won_short(fund.get("market_cap"))
+                col.metric(label, value, help=TOOLTIPS[label], border=True)
+    # 휴대폰용 목록. 터치 화면에는 마우스 오버가 없어 행을 누르면 설명을 펼친다.
+    rows = "".join(
+        f'<details><summary><span class="fs-list-label">{label}</span>'
+        f'<span class="fs-list-value">{value}</span></summary><p>{html.escape(TOOLTIPS[label])}</p></details>'
+        for label, value in items
+    )
+    st.markdown(f'<div class="fs-list">{rows}</div>', unsafe_allow_html=True)
 
 
 # ---------- 오른쪽: 뉴스 ----------

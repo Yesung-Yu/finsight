@@ -67,12 +67,11 @@ with st.sidebar:
         st.warning("AI 모델을 불러오지 못해 새 뉴스는 요약·판정 없이 표시됩니다.")
     cached_box = st.container()
 
-# ---------- 상단 검색 (FR-1) ----------
-top_left, top_right = st.columns([11, 10], gap="large")  # 아래 2단과 같은 비율로 맞춘다
-with top_left:
+# ---------- 2단 화면과 왼쪽 위 검색 (FR-1) ----------
+left, right = st.columns([11, 10], gap="large")  # 뉴스가 맨 위부터 나오도록 검색창을 왼쪽 단에 넣는다
+with left:
     query = st.text_input("종목 검색", key="query", placeholder="종목명 또는 종목코드 (예: 삼성전자, 005930)",
                           label_visibility="collapsed")
-top_right.markdown('<div class="fs-header">주식 뉴스 요약 · 투자 보조</div>', unsafe_allow_html=True)
 
 if not query.strip():
     st.markdown("#### 종목을 검색해 보세요")
@@ -113,14 +112,9 @@ if view.prices.empty and not view.news:
         st.caption(e)
     finish()
 
-# ---------- 수집 오류 안내 ----------
-for e in view.errors:
-    st.caption(f"⚠️ {e}")
-
-# ---------- 2단 화면 ----------
-left, right = st.columns([11, 10], gap="large")
-
 with left:
+    for e in view.errors:  # 수집 오류 안내
+        st.caption(f"⚠️ {e}")
     ui.stock_header(view.stock, view.quote)
     head, sel = st.columns([1, 1])
     head.markdown('<div class="fs-section">주가 추이</div>', unsafe_allow_html=True)
